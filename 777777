@@ -1,0 +1,225 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
+
+namespace UniversitySystem
+{
+    // Основные классы и интерфейсы
+    [Serializable]
+    public abstract class User
+    {
+        public string Login { get; set; }
+        public string Password { get; set; }
+    }
+
+    [Serializable]
+    public class Student : User
+    {
+        public string FullName { get; set; }
+        public int Age { get; set; }
+        public int YearOfBirth { get; set; }
+        public string Group { get; set; }
+        public List<Grade> Grades { get; set; } = new List<Grade>();
+
+        public void ViewGrades()
+        {
+            Console.WriteLine($"\nОценки студента {FullName}:");
+            foreach (var grade in Grades)
+            {
+                Console.WriteLine($"Предмет: {grade.Subject}, Оценка: {grade.Mark}, Дата: {grade.Date}");
+            }
+        }
+    }
+
+    [Serializable]
+    public class Teacher : User
+    {
+        public string FullName { get; set; }
+        public int YearOfBirth { get; set; }
+        public List<string> Subjects { get; set; } = new List<string>();
+        public List<string> Groups { get; set; } = new List<string>();
+
+        public void ViewJournal(List<Student> students)
+        {
+            Console.WriteLine($"\nЖурнал преподавателя {FullName}:");
+            foreach (var student in students)
+            {
+                if (Groups.Contains(student.Group))
+                {
+                    Console.WriteLine($"Группа: {student.Group}");
+                    student.ViewGrades();
+                }
+            }
+        }
+
+        public void AddGrade(Student student, string subject, int mark)
+        {
+            if (!Subjects.Contains(subject) || !Groups.Contains(student.Group))
+            {
+                Console.WriteLine("Нет прав на выставление оценки.");
+                return;
+            }
+            student.Grades.Add(new Grade { Subject = subject, Mark = mark, Date = DateTime.Now });
+            Console.WriteLine("Оценка успешно добавлена.");
+        }
+
+        public void EditGrade(Student student, string subject, int newMark)
+        {
+            var grade = student.Grades.Find(g => g.Subject == subject);
+            if (grade != null)
+            {
+                grade.Mark = newMark;
+                Console.WriteLine("Оценка успешно изменена.");
+            }
+            else
+            {
+                Console.WriteLine("Оценка по указанному предмету не найдена.");
+            }
+        }
+
+        public void DeleteGrade(Student student, string subject)
+        {
+            var grade = student.Grades.Find(g => g.Subject == subject);
+            if (grade != null)
+            {
+                student.Grades.Remove(grade);
+                Console.WriteLine("Оценка успешно удалена.");
+            }
+            else
+            {
+                Console.WriteLine("Оценка по указанному предмету не найдена.");
+            }
+        }
+    }
+
+    [Serializable]
+    public class Admin : User
+    {
+        public void ViewAllData(List<Student> students, List<Teacher> teachers)
+        {
+            Console.WriteLine("\nДанные студентов:");
+            foreach (var student in students)
+            {
+                Console.WriteLine($"{student.FullName}, Группа: {student.Group}");
+            }
+
+            Console.WriteLine("\nДанные преподавателей:");
+            foreach (var teacher in teachers)
+            {
+                Console.WriteLine($"{teacher.FullName}, Дисциплины: {string.Join(", ", teacher.Subjects)}");
+            }
+        }
+
+        public void AddStudent(List<Student> students, Student newStudent)
+        {
+            students.Add(newStudent);
+            Console.WriteLine("Студент успешно добавлен.");
+        }
+
+        public void AddTeacher(List<Teacher> teachers, Teacher newTeacher)
+        {
+            teachers.Add(newTeacher);
+            Console.WriteLine("Преподаватель успешно добавлен.");
+        }
+    }
+
+    [Serializable]
+    public class Grade
+    {
+        public string Subject { get; set; }
+        public int Mark { get; set; }
+        public DateTime Date { get; set; }
+    }
+
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            var students = LoadData<List<Student>>("students.bin") ?? new List<Student>();
+            var teachers = LoadData<List<Teacher>>("teachers.bin") ?? new List<Teacher>();
+
+            // Добавляем изначальных пользователей
+            if (students.Count == 0)
+            {
+                students.Add(new Student
+                {
+                    FullName = "Иван Иванов",
+                    Age = 20,
+                    YearOfBirth = 2003,
+                    Group = "ИС-01",
+                    Login = "student1",
+                    Password = "pass123"
+                });
+                SaveData("students.bin", students);
+            }
+
+            if (teachers.Count == 0)
+            {
+                teachers.Add(new Teacher
+                {
+                    FullName = "Петр Петров",
+                    YearOfBirth = 1985,
+                    Login = "teacher1",
+                    Password = "teach123",
+                    Subjects = new List<string> { "Математика" },
+                    Groups = new List<string> { "ИС-01" }
+                });
+                SaveData("teachers.bin", teachers);
+            }
+
+            Admin admin = new Admin { Login = "admin", Password = "admin123" };
+
+            Console.WriteLine("Добро пожаловать в систему!\n");
+            Console.Write("Введите логин: ");
+            string login = Console.ReadLine();
+            Console.Write("Введите пароль: ");
+            string password = Console.ReadLine();
+
+            if (admin.Login == login && admin.Password == password)
+            {
+                Console.WriteLine("Вы вошли как Администратор.");
+                admin.ViewAllData(students, teachers);
+            }
+            else if (students.Exists(s => s.Login == login && s.Password == password))
+            {
+                var student = students.Find(s => s.Login == login);
+                Console.WriteLine($"Вы вошли как Студент: {student.FullName}");
+                student.ViewGrades();
+            }
+            else if (teachers.Exists(t => t.Login == login && t.Password == password))
+            {
+                var teacher = teachers.Find(t => t.Login == login);
+                Console.WriteLine($"Вы вошли как Преподаватель: {teacher.FullName}");
+                teacher.ViewJournal(students);
+            }
+            else
+            {
+                Console.WriteLine("Неверный логин или пароль.");
+            }
+
+            SaveData("students.bin", students);
+            SaveData("teachers.bin", teachers);
+        }
+
+        static void SaveData<T>(string fileName, T data)
+        {
+            using (var fs = new FileStream(fileName, FileMode.Create))
+            {
+                var formatter = new BinaryFormatter();
+                formatter.Serialize(fs, data);
+            }
+        }
+
+        static T LoadData<T>(string fileName)
+        {
+            if (!File.Exists(fileName)) return default;
+            using (var fs = new FileStream(fileName, FileMode.Open))
+            {
+                var formatter = new BinaryFormatter();
+                return (T)formatter.Deserialize(fs);
+            }
+        }
+    }
+}
